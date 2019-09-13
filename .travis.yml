@@ -24,6 +24,7 @@ before_install:
 install:
   - pip install -r requirements-dev.txt
   - pip install .
+  - pip install htcondor==${HTCONDOR_VERSION}
 
 before_script:
   - sudo cp tests/_inf/condor_config.local /etc/condor/condor_config.local
@@ -31,4 +32,4 @@ before_script:
   - bash tests/_inf/start_condor.sh
 
 script:
-  - pytest --cov
+  - pytest --cov tests/integration
