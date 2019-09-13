@@ -26,6 +26,8 @@ install:
   - pip install .
 
 before_script:
+  - sudo cp tests/_inf/condor_config.local /etc/condor/condor_config.local
+  - sudo cp tests/_inf/.htmaprc ${HOME}/.htmaprc
   - bash tests/_inf/start_condor.sh
 
 script:
