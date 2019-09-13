@@ -1,7 +1,8 @@
 dist: xenial
-sudo: required
-services:
-  - docker
+
+addons:
+  apt:
+    update: true
 
 language: python
 python:
@@ -14,8 +15,18 @@ env:
 matrix:
   fast_finish: true
 
+before_install:
+  - curl https://research.cs.wisc.edu/htcondor/ubuntu/HTCondor-Release.gpg.key | sudo apt-key add -
+  - echo "deb http://research.cs.wisc.edu/htcondor/ubuntu/${HTCONDOR_VERSION}/bionic bionic contrib" | sudo tee -a /etc/apt/sources.list
+  - sudo apt-get update -qq
+  - sudo apt-get install -y --no-install-recommends htcondor
+
 install:
-  - travis_retry docker build -t htmap-test --file tests/_inf/Dockerfile --build-arg HTCONDOR_VERSION --build-arg PYTHON_VERSION=$TRAVIS_PYTHON_VERSION .
+  - pip install -r requirements-dev.txt
+  - pip install .
+
+before_script:
+  - bash tests/_inf/start_condor.sh
 
 script:
-  - docker run htmap-test tests/_inf/travis.sh
+  - pytest --cov

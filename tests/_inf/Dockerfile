@@ -22,14 +22,14 @@ USER root
 
 # build config
 ARG PYTHON_VERSION=3.7
-ARG HTCONDOR_VERSION=8.9
+ARG HTCONDOR_VERSION=8.8
 ARG MINICONDA_VERSION=latest
 
 # environment setup
-ENV DEBIAN_FRONTEND=noninteractive \
-    LC_ALL=en_US.UTF-8 \
-    LANG=en_US.UTF-8 \
-    LANGUAGE=en_US.UTF-8
+ENV DEBIAN_FRONTEND=noninteractive
+#    LC_ALL=en_US.UTF-8 \
+#    LANG=en_US.UTF-8 \
+#    LANGUAGE=en_US.UTF-8
 
 # faster container builds
 RUN apt-get update \
@@ -42,11 +42,11 @@ RUN apt-get update \
 
 # install utils and dependencies
 RUN apt-fast update \
- && apt-fast -y install --no-install-recommends sudo vim less build-essential git gnupg wget ca-certificates locales \
+ && apt-fast -y install --no-install-recommends sudo vim less build-essential git gnupg wget ca-certificates locales python3 python3-pip python3-setuptools \
  && apt-get -y clean \
- && rm -rf /var/lib/apt/lists/* \
- && echo "en_US.UTF-8 UTF-8" > /etc/locale.gen \
- && locale-gen
+ && rm -rf /var/lib/apt/lists/*
+# && echo "en_US.UTF-8 UTF-8" > /etc/locale.gen \
+# && locale-gen
 
 # install HTCondor version specified in config
 RUN wget -qO - https://research.cs.wisc.edu/htcondor/ubuntu/HTCondor-Release.gpg.key | apt-key add - \
@@ -58,27 +58,16 @@ RUN wget -qO - https://research.cs.wisc.edu/htcondor/ubuntu/HTCondor-Release.gpg
 
 # create a user to be our submitter and set conda install location
 ENV SUBMIT_USER=mapper
-ENV CONDA_DIR=/home/${SUBMIT_USER}/conda
-ENV PATH=${CONDA_DIR}/bin:${PATH}
 RUN groupadd ${SUBMIT_USER} \
  && useradd -m -g ${SUBMIT_USER} ${SUBMIT_USER}
 
 # switch to submit user, don't need root anymore
 USER ${SUBMIT_USER}
 
-# install miniconda and python version specified in config
-# (and ipython, which is nice for debugging inside the container)
-RUN cd /tmp \
- && wget --quiet https://repo.continuum.io/miniconda/Miniconda3-${MINICONDA_VERSION}-Linux-x86_64.sh \
- && bash Miniconda3-${MINICONDA_VERSION}-Linux-x86_64.sh -f -b -p $CONDA_DIR \
- && rm Miniconda3-${MINICONDA_VERSION}-Linux-x86_64.sh \
- && conda install python=${PYTHON_VERSION} ipython \
- && conda clean -y -all
-
 # install htmap dependencies early for docker build caching
 COPY requirements.txt /home/${SUBMIT_USER}/requirements.txt
 COPY requirements-dev.txt /home/${SUBMIT_USER}/requirements-dev.txt
-RUN pip install --no-cache -r /home/${SUBMIT_USER}/requirements-dev.txt \
+RUN pip3 install --no-cache -r /home/${SUBMIT_USER}/requirements-dev.txt \
  && rm /home/${SUBMIT_USER}/requirements*
 
 # set default entrypoint and command
@@ -95,4 +84,4 @@ COPY tests/_inf/.htmaprc /home/${SUBMIT_USER}/.htmaprc
 COPY --chown=mapper:mapper . /home/${SUBMIT_USER}/htmap
 WORKDIR /home/${SUBMIT_USER}/htmap
 RUN chmod +x /home/${SUBMIT_USER}/htmap/tests/_inf/entrypoint.sh /home/${SUBMIT_USER}/htmap/tests/_inf/travis.sh \
- && pip install --no-cache --no-deps -e .
+ && pip3 install --no-cache --no-deps -e .
