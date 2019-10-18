@@ -193,6 +193,19 @@ def create_submit_object_and_itemdata(
 
     itemdata = [{'component': str(idx)} for idx in range(num_components)]
 
+    handle_transfer_input_files(descriptors, itemdata, map_dir, map_options, num_components)
+    handle_extra_descriptors(descriptors, itemdata, map_options, num_components)
+
+    if descriptors[REQUIREMENTS] is None:
+        descriptors.pop(REQUIREMENTS)
+
+    sub = htcondor.Submit(descriptors)
+
+    return sub, itemdata
+
+
+def handle_transfer_input_files(descriptors, itemdata, map_dir, map_options, num_components):
+    """This mutates the descriptors and itemdata!"""
     input_files = descriptors.get('transfer_input_files', [])
     input_files += [
         (map_dir / names.FUNC).as_posix(),
@@ -214,6 +227,8 @@ def create_submit_object_and_itemdata(
             d['extra_input_files'] = f
     descriptors['transfer_input_files'] = ','.join(input_files)
 
+
+def handle_extra_descriptors(descriptors, itemdata, map_options, num_components):
     for descriptor, v in map_options.items():
         # v is either a single value, or it is an iterable of values for use as itemdata
         if not isinstance(v, str):  # implies it is iterable
@@ -227,13 +242,6 @@ def create_submit_object_and_itemdata(
             descriptors[descriptor] = f'$({itemdata_key})'
         else:
             descriptors[descriptor] = v
-
-    if descriptors[REQUIREMENTS] is None:
-        descriptors.pop(REQUIREMENTS)
-
-    sub = htcondor.Submit(descriptors)
-
-    return sub, itemdata
 
 
 def add_to_itemdata(itemdata, itemdata_key, itemdata_values):
