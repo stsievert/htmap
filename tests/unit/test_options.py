@@ -19,7 +19,7 @@ import pytest
 from tests.conftest import exception_msg
 
 import htmap
-from htmap.options import create_submit_object_and_itemdata, get_base_descriptors
+from htmap.options import create_submit_object_and_itemdata, get_delivery_descriptors
 
 
 def test_one_reserved_kwarg_raises():
@@ -396,10 +396,10 @@ def test_merging_options_merges_fixed_input():
     assert set(merged.fixed_input_files) == {'foo.txt', 'bar.txt'}
 
 
-def test_option_from_settings_is_visible_in_base_options():
+def test_option_from_settings_is_in_options_from_settings():
     htmap.settings['MAP_OPTIONS.zing'] = 'hit'
 
-    opts = get_base_descriptors('foo', Path('bar'), delivery = 'assume')
+    opts = htmap.MapOptions.from_settings()
 
     assert opts['zing'] == 'hit'
 
@@ -465,7 +465,7 @@ def test_two_urls_in_input_files():
 
 def test_unknown_delivery_mechanism():
     with pytest.raises(htmap.exceptions.UnknownPythonDeliveryMethod):
-        get_base_descriptors('foo', Path.cwd(), delivery = 'unknown')
+        get_delivery_descriptors('foo', Path.cwd(), delivery = 'unknown')
 
 
 @pytest.mark.parametrize(
@@ -476,6 +476,7 @@ def test_unknown_delivery_mechanism():
         'my.foo',
         'MY.foo',
         'mY.foo',
+        'My.foo',
     ]
 )
 def test_custom_options(key):

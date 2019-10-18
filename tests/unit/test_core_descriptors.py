@@ -17,20 +17,20 @@ import pytest
 
 from pathlib import Path
 
-import htmap
-from htmap.options import get_base_descriptors, register_delivery_mechanism, unregister_delivery_mechanism
-
-
-@pytest.fixture(scope = 'module', autouse = True)
-def add_null_delivery():
-    register_delivery_mechanism('null', lambda tag, map_dir: {})
-
-    yield
-
-    unregister_delivery_mechanism('null')
+from htmap.options import get_core_descriptors
 
 
 def test_job_batch_name_is_tag():
-    descriptors = get_base_descriptors('foo', Path.cwd(), 'null')
+    descriptors = get_core_descriptors('foo', Path.cwd())
 
     assert descriptors['JobBatchName'] == 'foo'
+
+
+@pytest.mark.parametrize(
+    "key", ["log", "stdout", "stderr", "initialdir"]
+)
+def test_paths_are_in_map_dir(key, tmp_path):
+    map_dir = tmp_path / 'map_dir'
+    descriptors = get_core_descriptors('foo', map_dir)
+
+    assert descriptors[key].startswith(map_dir.as_posix())

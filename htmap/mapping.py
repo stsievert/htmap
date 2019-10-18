@@ -290,6 +290,7 @@ def create_map(
 
     if map_options is None:
         map_options = options.MapOptions()
+    map_options = options.MapOptions.merge(map_options, options.MapOptions.from_settings())
 
     uid = uuid.uuid4()
     map_dir = map_dir_path(uid)

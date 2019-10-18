@@ -61,7 +61,7 @@ class MapOptions(collections.UserDict):
     def __init__(
         self,
         *,
-        fixed_input_files: Optional[Union[Union[str, Path], Iterable[Union[str, Path]]]] = None,
+        fixed_input_files: Optional[Iterable[Union[str, Path]]] = None,
         input_files: Optional[Union[Iterable[Union[str, Path]], Iterable[Iterable[Union[str, Path]]]]] = None,
         custom_options: Optional[Dict[str, str]] = None,
         **kwargs: Union[str, Iterable[str]],
@@ -70,7 +70,7 @@ class MapOptions(collections.UserDict):
         Parameters
         ----------
         fixed_input_files
-            A single file, or an iterable of files, to send to all components of the map.
+            An iterable of files to send to all components of the map.
             Local files can be specified as string paths or as actual :class:`pathlib.Path` objects.
             You can also specify a file to fetch from an URL like ``http://www.full.url/path/to/filename``.
         input_files
@@ -147,6 +147,10 @@ class MapOptions(collections.UserDict):
 
         return new
 
+    @classmethod
+    def from_settings(cls):
+        return cls(**settings.get("MAP_OPTIONS", {}))
+
 
 def normalize_path(path: Union[str, Path]) -> str:
     """
@@ -174,16 +178,18 @@ def create_submit_object_and_itemdata(
         settings['DELIVERY_METHOD'],
     )
 
-    descriptors = get_base_descriptors(
-        tag,
-        map_dir,
-        settings['DELIVERY_METHOD'],
-    )
-
-    descriptors[REQUIREMENTS] = merge_requirements(
-        [descriptors.get(REQUIREMENTS, None),
-         map_options.get(REQUIREMENTS, None), ]
-    )
+    descriptors = merge_submit_descriptions([
+        get_delivery_descriptors(
+            tag,
+            map_dir,
+            settings['DELIVERY_METHOD'],
+        ),
+        get_core_descriptors(tag, map_dir),
+    ])
+    descriptors[REQUIREMENTS] = merge_requirements([
+        descriptors.get(REQUIREMENTS, None),
+        map_options.get(REQUIREMENTS, None),
+    ])
 
     itemdata = [{'component': str(idx)} for idx in range(num_components)]
 
@@ -208,17 +214,19 @@ def create_submit_object_and_itemdata(
             d['extra_input_files'] = f
     descriptors['transfer_input_files'] = ','.join(input_files)
 
-    for opt_key, opt_value in map_options.items():
-        if not isinstance(opt_value, str):  # implies it is iterable
-            itemdata_key = f'itemdata_for_{opt_key}'
-            opt_value = tuple(opt_value)
-            if len(opt_value) != num_components:
-                raise exceptions.MisalignedInputData(f'Length of {opt_key} does not match length of input (len({opt_key}) = {len(opt_value)}, len(inputs) = {num_components})')
-            for dct, v in zip(itemdata, opt_value):
-                dct[itemdata_key] = v
-            descriptors[opt_key] = f'$({itemdata_key})'
+    for descriptor, v in map_options.items():
+        # v is either a single value, or it is an iterable of values for use as itemdata
+        if not isinstance(v, str):  # implies it is iterable
+            itemdata_key = f'itemdata_for_{descriptor}'
+
+            v = tuple(v)  # we need to do this to get the length in the next line
+            if len(v) != num_components:
+                raise exceptions.MisalignedInputData(f'Length of {descriptor} does not match length of input (len({descriptor}) = {len(v)}, len(inputs) = {num_components})')
+
+            add_to_itemdata(itemdata, itemdata_key, v)
+            descriptors[descriptor] = f'$({itemdata_key})'
         else:
-            descriptors[opt_key] = opt_value
+            descriptors[descriptor] = v
 
     if descriptors[REQUIREMENTS] is None:
         descriptors.pop(REQUIREMENTS)
@@ -226,6 +234,12 @@ def create_submit_object_and_itemdata(
     sub = htcondor.Submit(descriptors)
 
     return sub, itemdata
+
+
+def add_to_itemdata(itemdata, itemdata_key, itemdata_values):
+    """Insert the new items into the itemdata. This mutates the itemdata!"""
+    for dct, value in zip(itemdata, itemdata_values):
+        dct[itemdata_key] = value
 
 
 def register_delivery_mechanism(
@@ -252,11 +266,7 @@ def merge_requirements(requirements: Iterable[Optional[str]]) -> Optional[str]:
     return ' && '.join(f'({req})' for req in requirements)
 
 
-def get_base_descriptors(
-    tag: str,
-    map_dir: Path,
-    delivery: str,
-) -> dict:
+def get_core_descriptors(tag: str, map_dir: Path) -> dict:
     map_dir = map_dir.absolute()
     core = {
         'JobBatchName': tag,
@@ -274,22 +284,26 @@ def get_base_descriptors(
         '+IsHTMapJob': 'True',
     }
 
+    return core
+
+
+def get_delivery_descriptors(
+    tag: str,
+    map_dir: Path,
+    delivery: str,
+) -> dict:
     try:
-        from_delivery = DELIVERY_OPTIONS_FUNCTIONS[delivery](tag, map_dir)
+        return DELIVERY_OPTIONS_FUNCTIONS[delivery](tag, map_dir)
     except KeyError:
         raise exceptions.UnknownPythonDeliveryMethod(f"'{delivery}' is not a known delivery mechanism")
 
-    from_settings = settings.get('MAP_OPTIONS', default = {})
 
-    return merge_submit_descriptors([from_delivery, core, from_settings])
-
-
-def merge_dicts(dicts: Iterable[dict]):
+def merge_dicts(dicts: Iterable[dict]) -> dict:
     """"""
     return dict(collections.ChainMap(*dicts))
 
 
-def merge_submit_descriptors(dicts: Iterable[dict]):
+def merge_submit_descriptions(dicts: Iterable[dict]) -> dict:
     merged = merge_dicts(dicts)
 
     merged_requirements = merge_requirements((d.get(REQUIREMENTS, None) for d in dicts))
