@@ -28,8 +28,8 @@ from . import utils, exceptions, names, settings
 
 logger = logging.getLogger(__name__)
 
-BASE_OPTIONS_FUNCTION_BY_DELIVERY = {}
-SETUP_FUNCTION_BY_DELIVERY = {}
+DELIVERY_OPTIONS_FUNCTIONS = {}
+DELIVERY_SETUP_FUNCTIONS = {}
 
 REQUIREMENTS = 'requirements'
 
@@ -140,7 +140,7 @@ class MapOptions(collections.UserDict):
             new.input_files = other.input_files
 
         merged_requirements = merge_requirements(
-            *(other.get(REQUIREMENTS, None) for other in others)
+            (other.get(REQUIREMENTS, None) for other in others)
         )
         if merged_requirements is not None:
             new[REQUIREMENTS] = merged_requirements
@@ -181,8 +181,8 @@ def create_submit_object_and_itemdata(
     )
 
     descriptors[REQUIREMENTS] = merge_requirements(
-        descriptors.get(REQUIREMENTS, None),
-        map_options.get(REQUIREMENTS, None),
+        [descriptors.get(REQUIREMENTS, None),
+         map_options.get(REQUIREMENTS, None), ]
     )
 
     itemdata = [{'component': str(idx)} for idx in range(num_components)]
@@ -236,16 +236,16 @@ def register_delivery_mechanism(
     if setup_func is None:
         setup_func = lambda *args: None
 
-    BASE_OPTIONS_FUNCTION_BY_DELIVERY[name] = options_func
-    SETUP_FUNCTION_BY_DELIVERY[name] = setup_func
+    DELIVERY_OPTIONS_FUNCTIONS[name] = options_func
+    DELIVERY_SETUP_FUNCTIONS[name] = setup_func
 
 
 def unregister_delivery_mechanism(name: str) -> None:
-    BASE_OPTIONS_FUNCTION_BY_DELIVERY.pop(name)
-    SETUP_FUNCTION_BY_DELIVERY.pop(name)
+    DELIVERY_OPTIONS_FUNCTIONS.pop(name)
+    DELIVERY_SETUP_FUNCTIONS.pop(name)
 
 
-def merge_requirements(*requirements: Optional[str]) -> Optional[str]:
+def merge_requirements(requirements: Iterable[Optional[str]]) -> Optional[str]:
     requirements = [req for req in requirements if req is not None]
     if len(requirements) == 0:
         return None
@@ -275,23 +275,26 @@ def get_base_descriptors(
     }
 
     try:
-        base = BASE_OPTIONS_FUNCTION_BY_DELIVERY[delivery](tag, map_dir)
+        from_delivery = DELIVERY_OPTIONS_FUNCTIONS[delivery](tag, map_dir)
     except KeyError:
         raise exceptions.UnknownPythonDeliveryMethod(f"'{delivery}' is not a known delivery mechanism")
 
     from_settings = settings.get('MAP_OPTIONS', default = {})
 
-    merged = {
-        **core,
-        **base,
-        **from_settings,
-    }
+    return merge_submit_descriptors([from_delivery, core, from_settings])
 
-    merged[REQUIREMENTS] = merge_requirements(
-        core.get(REQUIREMENTS, None),
-        base.get(REQUIREMENTS, None),
-        from_settings.get(REQUIREMENTS, None),
-    )
+
+def merge_dicts(dicts: Iterable[dict]):
+    """"""
+    return dict(collections.ChainMap(*dicts))
+
+
+def merge_submit_descriptors(dicts: Iterable[dict]):
+    merged = merge_dicts(dicts)
+
+    merged_requirements = merge_requirements((d.get(REQUIREMENTS, None) for d in dicts))
+    if merged_requirements is not None:
+        merged[REQUIREMENTS] = merged_requirements
 
     return merged
 
@@ -304,7 +307,7 @@ def run_delivery_setup(
     _copy_run_scripts(map_dir)
 
     try:
-        SETUP_FUNCTION_BY_DELIVERY[delivery](tag, map_dir)
+        DELIVERY_SETUP_FUNCTIONS[delivery](tag, map_dir)
     except KeyError:
         raise exceptions.UnknownPythonDeliveryMethod(f"'{delivery}' is not a known delivery mechanism")
 
